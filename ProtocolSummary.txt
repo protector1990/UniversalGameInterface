@@ -1,0 +1,68 @@
+Unity Universal Interface (UUI in further text) protocol is a protocol for communication between game modules running on different devices, built for easy implementation on different platforms. Example server implementation is provided for Unity, and example client implementation is provided for Android.
+
+UUI is a minimalistic network communication protocol, built on transport layer of Internet protocol, and uses TCP and UDP protocols for communication. Protocol is built around client/server architecture. The protocol is rather simple and does not offer advanced multiplayer features like Unity Multiplayer system. It offers two basic communication paradigms:
+
+1) commands;
+2) streams.
+
+Server commands are commands that server exposes to clients that are available for envoking from client side (the plan is to also implement client commands that server can invoke on clients). In example implementation, commands are implemented in RPC fashion. Commands are really procedures on the server, and client can pass the parameters and invoke those functions. Network communication for command invoking is done via reliable TCP channel, so on one hand, invoking commands is guaranteed to work well, but on the other hand, commands should not be called on every frame as that would kill the performance.
+
+Streams are continuous updates of various values from client to server (there is also plan to implement client to server streams, as that would be needed for a serious multiplayer system). Streams are implemented on the unreliable UDP channel, as they are traffic-heavy and a few dropped packets wouldn't make much difference.
+
+Now let's dwelve into details about UUI protocol.
+
+1) Server startup
+Server will start listenting for incoming connections on TCP port of its choosing. Clients should know to which port they will be connecting to.
+2) Connecting
+Clients wanting to connect to the server should send connection request. Connection request consists of clients establishing TCP connection with server and authenticating wiht server with a secret. Client can use any port of its wishing to connect to server, and that port will be used for all subsequent server to client communication, both on TCP and UDP protocols. Secret is a predefined string which can help identify clients and servers to be clients and servers for the same game. If the client was identified successfully, it gets as a response value 1. If the authentication fails, server sends error string to client.
+
+When client gets successful response, it can assume that the connection was completed successfully, and it can start interacting with server. Interactions with server can be accomplished with different kind of operations. Any operation is invoked with TCP transfer that contains one byte with operation id followed by operation-specific payload. Operation ids are following:
+
+
+1 - streamSubscription
+2 - streamUnsubscription
+3 - commandExecution
+4 - get all commands
+
+Streams
+A stream is continuous sending of data between server and client. In current version of UGI, only streams from server to client are allowed. Every stream is identified by its unique name. Stream contents should be known by both client and server. A stream is transmitted in predefined intervals to all clients that are subscribed to that specific stream.
+Data that can be exchanged by streams consists of values of 4 different types:
+
+String (ascii encoded, first byte n specifies length, next n bytes specify ascii encoded string)
+Integer (4 bytes)
+Float (4 bytes)
+Vector3(12 bytes)
+
+All numeric values can be encoded either as low endian or big endian. Current implementation asusmes that there will be only low endian encoding.
+
+Streams are sent over UDP, so it is not guaranteed that every packet will be delivered. Structure of a UDP transmission for a stream is following:
+
+(String name)(Payload)
+
+In order for client to start receiving data from a stream, it must subscribe to it by invoking streamSubscription operation. In order to stop receiving data from a strem, client must invoke streamUnsubscription operation.
+
+Commands
+Commands are functions on the server that a client can invoke. Main difference between commands and streams is that streams are a form of unreliable communication, and commands are reliable. That means that commands are lower performance and shouldn't be used in every frame - there are streams for that. Commands should be regarded as a form of event driven system, where client notifies the server that an event has happened by invoking a certain command.
+
+Commands are invoked by executing commandExecution operation. TCP transmission for the commandExecution should look like this:
+
+(3 - operation id, 1 byte)(1 byte - command id)(Payload - Command arguments)
+
+Command arguments are, as with stream payloads, serialized variables that are placed one after another. Again, both server and client must know the structure of a command payload in order to successfully execute commands.
+
+Every command has its unique id. Since commands are reliable channel of communication, it was decided that in command execution transmissions 1 byte command id will be used instead of a name. Command id is not pre determined and clients do not have to know which command names corespond with which command ids. Also, a server isn't required to assign the same command id to a command in every server instance.
+
+In order for client to make a logical connection between command name and command id, getAllCommands command was devised. With this operation client retreives all commands available on the server and their corresponding ids. Transmission for this operation should look like this:
+
+(4 - operation id, 1 byte)
+
+In response, server will make a transmission of following content:
+(0 - response id)(1 byte: N - command conunt)(String command name x N)
+
+Command id for a specific command corresponds to its index position in getAllCommands response, where indexing starts with 0.
+
+When client requests getAllCommands, server responds with commands that it has registered at the moment. Server has the right to add or remove commands after this.
+
+Operation response codes:
+0 - available commands
+1 - connectionOK
