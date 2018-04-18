@@ -15,7 +15,7 @@ Creating UGI was my graduation thesis on Belgrade Metropolitan University, Facul
 
 # UGI protocol specification
 
-UGI protocol is described in ProtocolDescription.txt.
+UGI protocol is described in ProtocolSummary.txt.
 
 # Repository contents
 
